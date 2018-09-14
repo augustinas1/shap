@@ -38,7 +38,7 @@ def kmeans(X, k, round_values=True):
     if str(type(X)).endswith("'pandas.core.frame.DataFrame'>"):
         group_names = X.columns
         X = X.values
-    kmeans = KMeans(n_clusters=k, random_state=0).fit(X)
+    kmeans = KMeans(n_clusters=k, random_state=0, verbose=True).fit(X)
 
     if round_values:
         for i in range(k):

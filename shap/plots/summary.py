@@ -14,7 +14,8 @@ from . import colors
 # TODO: remove unused title argument / use title argument
 def summary_plot(shap_values, features=None, feature_names=None, max_display=None, plot_type="dot",
                  color=None, axis_color="#333333", title=None, alpha=1, show=True, sort=True,
-                 color_bar=True, auto_size_plot=True, layered_violin_max_num_bins=20, class_names=None):
+                 color_bar=True, auto_size_plot=True, layered_violin_max_num_bins=20, class_names=None,
+                 filename='image1.png'):
     """Create a SHAP summary plot, colored by feature values when they are provided.
 
     Parameters
@@ -81,7 +82,8 @@ def summary_plot(shap_values, features=None, feature_names=None, max_display=Non
         slow = -v
         shigh = v
 
-        pl.figure(figsize=(1.5 * max_display + 1, 0.8 * max_display + 1))
+        pl.figure(figsize=(2*1.5 * max_display + 1, 2*0.8 * max_display + 1))
+        #pl.figure(figsize=(1.5 * max_display + 1, 0.8 * max_display + 1))
         pl.subplot(1, max_display, 1)
         proj_shap_values = shap_values[:, sort_inds[0], sort_inds]
         proj_shap_values[:, 1:] *= 2  # because off diag effects are split in half
@@ -94,7 +96,7 @@ def summary_plot(shap_values, features=None, feature_names=None, max_display=Non
         )
         pl.xlim((slow, shigh))
         pl.xlabel("")
-        title_length_limit = 11
+        title_length_limit = 20
         pl.title(shorten_text(feature_names[sort_inds[0]], title_length_limit))
         for i in range(1, min(len(sort_inds), max_display)):
             ind = sort_inds[i]
@@ -119,6 +121,7 @@ def summary_plot(shap_values, features=None, feature_names=None, max_display=Non
         pl.tight_layout(pad=0, w_pad=0, h_pad=0.0)
         pl.subplots_adjust(hspace=0, wspace=0.1)
         if show:
+            pl.savefig(filename, dpi=100)
             pl.show()
         return
 
@@ -389,6 +392,8 @@ def summary_plot(shap_values, features=None, feature_names=None, max_display=Non
     else:
         pl.xlabel(labels['VALUE'], fontsize=13)
     if show:
+        pl.tight_layout()
+        pl.savefig(filename, dpi=300)
         pl.show()
 
 def shorten_text(text, length_limit):

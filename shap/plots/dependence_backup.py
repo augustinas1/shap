@@ -10,7 +10,7 @@ from . import colors
 # TODO: remove color argument / use color argument
 def dependence_plot(ind, shap_values, features, feature_names=None, display_features=None,
                     interaction_index="auto", color="#1E88E5", axis_color="#333333",
-                    dot_size=16, alpha=1, title=None, show=True, num_plots=1, filename=None):
+                    dot_size=16, alpha=1, title=None, show=True):
     """
     Create a SHAP dependence plot, colored by an interaction feature.
 
@@ -33,12 +33,6 @@ def dependence_plot(ind, shap_values, features, feature_names=None, display_feat
 
     interaction_index : "auto", None, or int
         The index of the feature used to color the plot.
-
-    num_plots : int
-        Number of dependence plots to be created allowing to see dependencies on more than
-        one most correlated feature.
-
-        If set to 1 maintain default functionality.
     """
 
     # convert from DataFrames if we got any
@@ -75,115 +69,28 @@ def dependence_plot(ind, shap_values, features, feature_names=None, display_feat
 
     ind = convert_name(ind)
 
-    interaction_plot = False
-    interactions_sorted = None
-
     # plotting SHAP interaction values
     if len(shap_values.shape) == 3 and len(ind) == 2:
-
-        ind = convert_name(ind[0])
-
-        interaction_plot = True
-
-        interactions = np.abs(shap_values[:, ind, :]).sum(0)
-        interactions_sorted = np.argsort(-interactions)
-        interaction_index = interactions_sorted[0]
-
-        # put the main effect as the first element for the sake of clarity
-        if (interaction_index != ind):
-            interaction_index = np.where(interactions_sorted == ind)
-            interactions_sorted = np.delete(interactions_sorted, interaction_index)
-            interactions_sorted = np.insert(interactions_sorted, 0, ind)
-
-        ylim_max = np.amax(shap_values[:, ind, interactions_sorted[:num_plots]])*2
-        ylim_min = np.amin(shap_values[:, ind, interactions_sorted[:num_plots]])*2
-        print(ylim_max, ylim_min)
-
-
-    # plotting dependence values
-
-    # guess what other feature as the strongest interaction with the plotted feature
-    if interaction_index == "auto":
-        interactions = approx_interactions(ind, shap_values, features)
-        interactions_sorted = np.argsort(-np.abs(interactions))
-        interaction_index = interactions_sorted[0]
-        #print (interactions_sorted)
-        #print (feature_names[interactions_sorted])
-
-    # Need to initialise this, otherwise breaks
-    if (interactions_sorted is None):
-        interactions_sorted = np.array((1, ))
-        print(interaction_index)
-        interactions_sorted.fill(interaction_index)
-
-    # Create a figure for all the subplots
-    cols = 1
-    rows = num_plots // cols
-    rows += num_plots % cols
-    position = range(1, num_plots+1)
-    fig_width = 7.5 * cols
-    fig_height = 5 * rows
-    fig = pl.figure(1, figsize=(fig_width, fig_height))
-
-    # Create actual plots
-    for i in range(num_plots):
-        ax = fig.add_subplot(rows, cols, position[i])
-
-        # allow a single feature name to be passed alone
-        if type(feature_names) == str:
-            feature_names = [feature_names]
-        name = feature_names[ind]
-
-        interaction_index = interactions_sorted[i]
-        print(interactions[interaction_index], feature_names[interaction_index])
-        interaction_index = convert_name(interaction_index)
-
-        if interaction_plot:
-
-            if ind == interaction_index:
-                proj_shap_values = shap_values[:, interaction_index, :]
-            else:
-                proj_shap_values = shap_values[:, interaction_index, :] * 2  # off-diag values are split in half
-
-            plot_the_plot(ax, ind, proj_shap_values, features,
-                          feature_names, display_features,
-                          interaction_index, color, axis_color,
-                          dot_size, alpha, title, show=False)
-
-            if ind == interaction_index:
-                ax.set_ylabel(labels['MAIN_EFFECT'] % feature_names[ind], fontsize=11)
-            else:
-                ax.set_ylabel(labels['INTERACTION_EFFECT'] % (feature_names[ind], feature_names[interaction_index]), fontsize=11)
-
-            # Normalise the plot y-axis values
-            ax.set_ylim(ylim_min-0.02, ylim_max+0.02)
-
+        ind1 = convert_name(ind[0])
+        ind2 = convert_name(ind[1])
+        if ind1 == ind2:
+            proj_shap_values = shap_values[:, ind2, :]
         else:
+            proj_shap_values = shap_values[:, ind2, :] * 2  # off-diag values are split in half
 
-            plot_the_plot(ax, ind, shap_values, features,
-                          feature_names, display_features,
-                          interaction_index, color, axis_color,
-                          dot_size, alpha, title, show=False)
+        # TODO: remove recursion; generally the functions should be shorter for more maintainable code
+        dependence_plot(
+            ind1, proj_shap_values, features, feature_names=feature_names,
+            interaction_index=ind2, display_features=display_features, show=False
+        )
+        if ind1 == ind2:
+            pl.ylabel(labels['MAIN_EFFECT'] % feature_names[ind1])
+        else:
+            pl.ylabel(labels['INTERACTION_EFFECT'] % (feature_names[ind1], feature_names[ind2]))
 
-            if (i % cols == 0):
-                ax.set_ylabel(labels['VALUE_FOR'] % name, color=axis_color, fontsize=13)
-
-        if (i+1 > num_plots-cols):
-            ax.set_xlabel(name, color=axis_color, fontsize=13)
-
-    if title is not None:
-        fig.set_title(title, color=axis_color, fontsize=13)
-
-    if filename is not None:
-        pl.tight_layout()
-        pl.savefig(filename, dpi=150)
-    if show:
-        pl.show()
-
-def plot_the_plot(ax, ind, shap_values, features,
-                  feature_names=None, display_features=None,
-                  interaction_index=None, color="#1E88E5", axis_color="#333333",
-                  dot_size=16, alpha=1, title=None, show=False):
+        if show:
+            pl.show()
+        return
 
     assert shap_values.shape[0] == features.shape[0], \
         "'shap_values' and 'features' values must have the same number of rows!"
@@ -200,7 +107,21 @@ def plot_the_plot(ax, ind, shap_values, features,
             name_map[xd[i]] = xv[i]
         xnames = list(name_map.keys())
 
+    # allow a single feature name to be passed alone
+    if type(feature_names) == str:
+        feature_names = [feature_names]
+    name = feature_names[ind]
+
+    # guess what other feature as the stongest interaction with the plotted feature
+    if interaction_index == "auto":
+        interactions = approx_interactions(ind, shap_values, features)
+        interactions_sorted = np.argsort(-np.abs(interactions))
+        interaction_index = interactions_sorted[0]
+        print (interactions_sorted)
+        print (feature_names[interactions_sorted])
+    interaction_index = convert_name(interaction_index)
     categorical_interaction = False
+
     # get both the raw and display color values
     if interaction_index is not None:
         cv = features[:, interaction_index]
@@ -224,10 +145,10 @@ def plot_the_plot(ax, ind, shap_values, features,
 
     # the actual scatter plot, TODO: adapt the dot_size to the number of data points?
     if interaction_index is not None:
-        plot_ax = ax.scatter(xv, s, s=dot_size, linewidth=0, c=features[:, interaction_index], cmap=colors.red_blue,
+        pl.scatter(xv, s, s=dot_size, linewidth=0, c=features[:, interaction_index], cmap=colors.red_blue,
                    alpha=alpha, vmin=clow, vmax=chigh, norm=color_norm, rasterized=len(xv) > 500)
     else:
-        plot_ax = ax.scatter(xv, s, s=dot_size, linewidth=0, color="#1E88E5",
+        pl.scatter(xv, s, s=dot_size, linewidth=0, color="#1E88E5",
                    alpha=alpha, rasterized=len(xv) > 500)
 
     if interaction_index != ind and interaction_index is not None:
@@ -237,10 +158,10 @@ def plot_the_plot(ax, ind, shap_values, features,
             if len(tick_positions) == 2:
                 tick_positions[0] -= 0.25
                 tick_positions[1] += 0.25
-            cb = pl.colorbar(plot_ax, ax=ax, ticks=tick_positions)
-            cb.set_ticklabels(ax, cnames)
+            cb = pl.colorbar(ticks=tick_positions)
+            cb.set_ticklabels(cnames)
         else:
-            cb = pl.colorbar(plot_ax, ax=ax)
+            cb = pl.colorbar()
 
         cb.set_label(feature_names[interaction_index], size=13)
         cb.ax.tick_params(labelsize=11)
@@ -251,15 +172,26 @@ def plot_the_plot(ax, ind, shap_values, features,
         bbox = cb.ax.get_window_extent().transformed(pl.gcf().dpi_scale_trans.inverted())
         cb.ax.set_aspect((bbox.height - 0.7) * 20)
 
-    ax.xaxis.set_ticks_position('bottom')
-    ax.yaxis.set_ticks_position('left')
-    ax.spines['right'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-    ax.tick_params(color=axis_color, labelcolor=axis_color, labelsize=11)
-    for spine in ax.spines.values():
+    # make the plot more readable
+    if interaction_index != ind:
+        pl.gcf().set_size_inches(7.5, 5)
+    else:
+        pl.gcf().set_size_inches(6, 5)
+    pl.xlabel(name, color=axis_color, fontsize=13)
+    pl.ylabel(labels['VALUE_FOR'] % name, color=axis_color, fontsize=13)
+    if title is not None:
+        pl.title(title, color=axis_color, fontsize=13)
+    pl.gca().xaxis.set_ticks_position('bottom')
+    pl.gca().yaxis.set_ticks_position('left')
+    pl.gca().spines['right'].set_visible(False)
+    pl.gca().spines['top'].set_visible(False)
+    pl.gca().tick_params(color=axis_color, labelcolor=axis_color, labelsize=11)
+    for spine in pl.gca().spines.values():
         spine.set_edgecolor(axis_color)
     if type(xd[0]) == str:
-        ax.set_xticks([name_map[n] for n in xnames], xnames, rotation='vertical', fontsize=11)
+        pl.xticks([name_map[n] for n in xnames], xnames, rotation='vertical', fontsize=11)
+    if show:
+        pl.show()
 
 
 def approx_interactions(index, shap_values, X):
@@ -292,3 +224,4 @@ def approx_interactions(index, shap_values, X):
         interactions.append(v)
 
     return interactions
+    #return np.argsort(-np.abs(interactions))
